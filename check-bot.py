@@ -247,6 +247,14 @@ def setup_dispatcher():
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(CommandHandler("reset", reset))
 
+# Register persistent bot commands so "Menu → Reset" shows up for users
+bot.set_my_commands([
+    ("start", "Start checklist"),
+    ("reset", "Reset the checklist flow"),
+    ("cancel", "Cancel the current checklist"),
+])
+
+
 def set_webhook():
     url = f"{NGROK_URL}{WEBHOOK_PATH}"
     bot.set_webhook(url)
