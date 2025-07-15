@@ -1,12 +1,12 @@
 import os
 import re
-import uuid
 import datetime
+import uuid
 from zoneinfo import ZoneInfo
 from flask import Flask, request
 import gspread
 from telegram import (
-    Bot, Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove,
+    Bot, Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ReplyKeyboardMarkup
 )
 from telegram.ext import (
     Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
@@ -94,34 +94,38 @@ def get_filtered_questions(outlet, slot):
 
 # === Bot Flow ===
 def start(update: Update, context):
-    contact_btn = KeyboardButton("\ud83d\udcf1 Send Phone Number", request_contact=True)
+    contact_btn = KeyboardButton("📱 Send Phone Number", request_contact=True)
+    bot.set_my_commands([("reset", "Reset the flow")])
     update.message.reply_text("Please verify your phone number to continue:",
         reply_markup=ReplyKeyboardMarkup([[contact_btn]], resize_keyboard=True, one_time_keyboard=True))
     return ASK_CONTACT
 
 def handle_contact(update: Update, context):
     if not update.message.contact:
-        update.message.reply_text("\u274c Please use the button to send your contact.")
+        update.message.reply_text("❌ Please use the button to send your contact.")
         return ASK_CONTACT
 
     phone = normalize_number(update.message.contact.phone_number)
     emp_name, outlet = get_employee_info(phone)
 
     if emp_name == "Unknown" or not outlet:
-        update.message.reply_text("\u274c You're not rostered today or not registered in the system.", reply_markup=ReplyKeyboardRemove())
+        update.message.reply_text("❌ You're not rostered today or not registered in the system.", reply_markup=ReplyKeyboardRemove())
         return ConversationHandler.END
 
-    submission_id = str(uuid.uuid4())[:8]
-    context.user_data.update({"emp_name": emp_name, "outlet": outlet, "submission_id": submission_id})
-    update.message.reply_text("\u23f0 Select time slot:",
+    context.user_data.update({"emp_name": emp_name, "outlet": outlet})
+    update.message.reply_text("⏰ Select time slot:",
         reply_markup=ReplyKeyboardMarkup([["Morning", "Mid Day", "Closing"]], one_time_keyboard=True))
     return ASK_SLOT
 
 def load_questions(update: Update, context):
     context.user_data["slot"] = update.message.text
+    context.user_data["submission_id"] = str(uuid.uuid4())[:8]
+    context.user_data["timestamp"] = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
+    context.user_data["date"] = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
+
     questions = get_filtered_questions(context.user_data["outlet"], context.user_data["slot"])
     if not questions:
-        update.message.reply_text("\u274c No checklist questions found.", reply_markup=ReplyKeyboardRemove())
+        update.message.reply_text("❌ No checklist questions found.", reply_markup=ReplyKeyboardRemove())
         return ConversationHandler.END
 
     context.user_data.update({"questions": questions, "answers": [], "current_q": 0})
@@ -130,38 +134,37 @@ def load_questions(update: Update, context):
 def ask_next_question(update: Update, context):
     idx = context.user_data["current_q"]
     if idx >= len(context.user_data["questions"]):
-        update.message.reply_text("\u2705 All questions completed. Logging responses...", reply_markup=ReplyKeyboardRemove())
+        update.message.reply_text("✅ All questions completed. Logging responses...", reply_markup=ReplyKeyboardRemove())
         try:
             client = gspread.authorize(ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, SCOPE))
             sheet = client.open(SHEET_NAME).worksheet(TAB_RESPONSES)
-            meta_sheet = client.open(SHEET_NAME).worksheet(TAB_SUBMISSIONS)
-
-            submission_id = context.user_data["submission_id"]
-            today = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
-            now = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
-            outlet = context.user_data["outlet"]
-            slot = context.user_data["slot"]
-            emp_name = context.user_data["emp_name"].replace("_", " ")
+            sheet_meta = client.open(SHEET_NAME).worksheet(TAB_SUBMISSIONS)
 
             for item in context.user_data["answers"]:
                 sheet.append_row([
-                    submission_id,
+                    context.user_data["submission_id"],
                     item["question"],
                     item["answer"],
                     item.get("image_link", "")
                 ])
 
-            meta_sheet.append_row([
-                submission_id, today, slot, outlet, emp_name, now
+            sheet_meta.append_row([
+                context.user_data["submission_id"],
+                context.user_data["date"],
+                context.user_data["slot"],
+                context.user_data["outlet"],
+                context.user_data["emp_name"].replace("_", " "),
+                context.user_data["timestamp"]
             ])
 
-            update.message.reply_text("\u2705 Responses saved to Google Sheets.")
+            update.message.reply_text("✅ Submission complete and saved to Google Sheets.")
         except Exception as e:
-            update.message.reply_text(f"\u274c Error saving to sheet: {e}")
+            update.message.reply_text(f"❌ Error saving to sheet: {e}")
+
         return ConversationHandler.END
 
     q_data = context.user_data["questions"][idx]
-    update.message.reply_text(f"\u2753 {q_data['question']}",
+    update.message.reply_text(f"❓ {q_data['question']}",
         reply_markup=ReplyKeyboardMarkup([["Yes", "No"]], one_time_keyboard=True))
     return ASK_QUESTION
 
@@ -171,7 +174,7 @@ def handle_answer(update: Update, context):
     context.user_data["answers"].append({"question": q_data["question"], "answer": ans})
 
     if q_data["image_required"]:
-        update.message.reply_text("\ud83d\udcf7 Please upload image for this step.")
+        update.message.reply_text("📷 Please upload image for this step.")
         return ASK_IMAGE
 
     context.user_data["current_q"] += 1
@@ -207,16 +210,21 @@ def handle_image_upload(update: Update, context):
         except Exception:
             pass
 
-        update.message.reply_text("\u2705 Image uploaded.")
+        update.message.reply_text("✅ Image uploaded.")
     else:
-        update.message.reply_text("\u274c Please upload a photo.")
+        update.message.reply_text("❌ Please upload a photo.")
         return ASK_IMAGE
 
     context.user_data["current_q"] += 1
     return ask_next_question(update, context)
 
 def cancel(update: Update, context):
-    update.message.reply_text("\u274c Cancelled.", reply_markup=ReplyKeyboardRemove())
+    update.message.reply_text("❌ Cancelled.", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+def reset(update: Update, context):
+    context.user_data.clear()
+    update.message.reply_text("🔁 Reset done. Use /start again.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
@@ -234,14 +242,15 @@ def setup_dispatcher():
             ASK_QUESTION: [MessageHandler(Filters.text & ~Filters.command, handle_answer)],
             ASK_IMAGE: [MessageHandler(Filters.photo, handle_image_upload)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)]
+        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("reset", reset)]
     )
     dispatcher.add_handler(conv_handler)
+    dispatcher.add_handler(CommandHandler("reset", reset))
 
 def set_webhook():
     url = f"{NGROK_URL}{WEBHOOK_PATH}"
     bot.set_webhook(url)
-    print(f"\u2705 Webhook set to: {url}")
+    print(f"✅ Webhook set to: {url}")
 
 if __name__ == "__main__":
     setup_dispatcher()
