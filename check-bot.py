@@ -37,7 +37,7 @@ TAB_ROSTER = "Roster"
 
 # === Google Drive Upload ===
 IMAGE_FOLDER = "checklist"
-DRIVE_FOLDER_ID = "0AEmGXk8Yd_pdUk9PVA"
+DRIVE_FOLDER_ID = "1iuzlWmilSvoLkwt8GQB6Q4KiPr6p8c92"
 os.makedirs(IMAGE_FOLDER, exist_ok=True)
 
 def setup_drive():
