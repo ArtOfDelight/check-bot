@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from flask import Flask, request
 import gspread
 from telegram import (
-    Bot, Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, ReplyKeyboardMarkup
+    Bot, Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 )
 from telegram.ext import (
     Dispatcher, CommandHandler, MessageHandler, Filters, ConversationHandler
@@ -54,7 +54,7 @@ def normalize_number(number):
     return re.sub(r"\D", "", number)[-10:]
 
 def sanitize_filename(name):
-    return re.sub(r"[^a-zA-Z0-9_]", "", name.replace(" ", "_"))
+    return re.sub(r"[^a-zA-Z0-9_/\\.]", "", name.replace(" ", "_"))
 
 def get_employee_info(phone):
     phone = normalize_number(phone)
@@ -94,7 +94,7 @@ def get_filtered_questions(outlet, slot):
 
 # === Bot Flow ===
 def start(update: Update, context):
-    contact_btn = KeyboardButton("📱 Send Phone Number", request_contact=True)
+    contact_btn = KeyboardButton("\U0001F4F1 Send Phone Number", request_contact=True)
     bot.set_my_commands([("reset", "Reset the flow")])
     update.message.reply_text("Please verify your phone number to continue:",
         reply_markup=ReplyKeyboardMarkup([[contact_btn]], resize_keyboard=True, one_time_keyboard=True))
@@ -188,25 +188,23 @@ def handle_image_upload(update: Update, context):
         emp_name = context.user_data.get("emp_name", "User")
         time_slot = context.user_data.get("slot", "Unknown").replace(" ", "")
         q_num = context.user_data["current_q"] + 1
-        filename = f"{time_slot}_{emp_name}_Q{q_num}.jpg"
-        filepath = os.path.join(IMAGE_FOLDER, secure_filename(filename))
+        filename = f"{time_slot}/{emp_name}_Q{q_num}.jpg"
+        local_path = os.path.join(IMAGE_FOLDER, secure_filename(filename.replace("/", "_")))
 
-        file.download(custom_path=filepath)
+        file.download(custom_path=local_path)
 
         gfile = drive.CreateFile({
             'title': filename,
             'parents': [{'id': DRIVE_FOLDER_ID}],
             'supportsAllDrives': True
         })
-        gfile.SetContentFile(filepath)
+        gfile.SetContentFile(local_path)
         gfile.Upload(param={'supportsAllDrives': True})
 
-        file_id = gfile['id']
-        web_link = f"https://drive.google.com/uc?export=view&id={file_id}"
-        context.user_data["answers"][-1]["image_link"] = web_link
+        context.user_data["answers"][-1]["image_link"] = f"checklist/{filename}"
 
         try:
-            os.remove(filepath)
+            os.remove(local_path)
         except Exception:
             pass
 
@@ -246,14 +244,6 @@ def setup_dispatcher():
     )
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(CommandHandler("reset", reset))
-
-# Register persistent bot commands so "Menu → Reset" shows up for users
-bot.set_my_commands([
-    ("start", "Start checklist"),
-    ("reset", "Reset the checklist flow"),
-    ("cancel", "Cancel the current checklist"),
-])
-
 
 def set_webhook():
     url = f"{NGROK_URL}{WEBHOOK_PATH}"
