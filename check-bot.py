@@ -33,7 +33,7 @@ CREDS_FILE = "service_account.json"
 SHEET_NAME = "AOD Master App"
 TAB_EMP = "EmployeeRegister"
 TAB_CHECKLIST = "ChecklistQuestions"
-TAB_RESPONSES = "Checklist Responses - Jatin"
+TAB_RESPONSES = "ChecklistResponses"
 TAB_SUBMISSIONS = "ChecklistSubmissions"
 TAB_ROSTER = "Roster"
 
