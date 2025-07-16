@@ -157,7 +157,7 @@ def ask_next_question(update: Update, context):
                 context.user_data["timestamp"]
             ])
 
-            update.message.reply_text("✅ Submission complete and saved to Google Sheets.")
+            update.message.reply_text("✅ Submission complete.")
         except Exception as e:
             update.message.reply_text(f"❌ Error saving to sheet: {e}")
 
@@ -186,10 +186,9 @@ def handle_image_upload(update: Update, context):
         file = photo.get_file()
 
         emp_name = context.user_data.get("emp_name", "User")
-        time_slot = context.user_data.get("slot", "Unknown").replace(" ", "")
         q_num = context.user_data["current_q"] + 1
-        filename = f"{time_slot}/{emp_name}_Q{q_num}.jpg"
-        local_path = os.path.join(IMAGE_FOLDER, secure_filename(filename.replace("/", "_")))
+        filename = f"{emp_name}_Q{q_num}.jpg"
+        local_path = os.path.join(IMAGE_FOLDER, secure_filename(filename))
 
         file.download(custom_path=local_path)
 
