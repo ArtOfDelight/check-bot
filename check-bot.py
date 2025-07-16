@@ -249,8 +249,6 @@ def set_webhook():
     bot.set_webhook(url)
     print(f"✅ Webhook set to: {url}")
 
-if __name__ == "__main__":
-    setup_dispatcher()
-    set_webhook()
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+setup_dispatcher()
+set_webhook()
+
